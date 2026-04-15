@@ -31,7 +31,7 @@ export default function CanvasPage() {
             }
           }}
         >
-          Reset demo template
+          Reset canvas
         </Button>
       </header>
       <FlowCanvas />

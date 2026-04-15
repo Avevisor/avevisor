@@ -22,7 +22,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { AgentNodeType } from "@/lib/node-schema/types";
 import { validateFlowGraph } from "@/lib/node-schema/validation";
-import { FLOW_STORAGE_KEY, getSeededFlowTemplate } from "@/lib/flow-template";
+import {
+  FLOW_STORAGE_KEY,
+  getDefaultFlowTemplate,
+} from "@/lib/flow-template";
 
 import type { AgentNodeData } from "./agent-node";
 import { AgentNode } from "./agent-node";
@@ -69,12 +72,12 @@ function FlowCanvasInner() {
         setNodes(parsed.nodes);
         setEdges(parsed.edges);
       } else {
-        const seed = getSeededFlowTemplate();
+        const seed = getDefaultFlowTemplate();
         setNodes(seed.nodes);
         setEdges(seed.edges);
       }
     } catch {
-      const seed = getSeededFlowTemplate();
+      const seed = getDefaultFlowTemplate();
       setNodes(seed.nodes);
       setEdges(seed.edges);
     }
@@ -83,14 +86,14 @@ function FlowCanvasInner() {
 
   useEffect(() => {
     function onReset() {
-      const seed = getSeededFlowTemplate();
+      const seed = getDefaultFlowTemplate();
       setNodes(seed.nodes);
       setEdges(seed.edges);
       localStorage.setItem(
         FLOW_STORAGE_KEY,
         JSON.stringify({ nodes: seed.nodes, edges: seed.edges }),
       );
-      setValidation("Loaded demo template.");
+      setValidation("Reset to a single Supervisor.");
     }
     window.addEventListener("avevisor:reset-flow", onReset);
     return () => window.removeEventListener("avevisor:reset-flow", onReset);
