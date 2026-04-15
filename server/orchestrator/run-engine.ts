@@ -298,7 +298,9 @@ export async function executeFlow(params: {
         useMev: boolean;
       }>(n);
 
-      const isDryRun = policy.dryRun || params.dryRun === true;
+      /** UI `dryRun` overrides default policy when provided. */
+      const isDryRun =
+        params.dryRun !== undefined ? params.dryRun : policy.dryRun;
       if (!isDryRun) {
         assertTraderAllowed({
           policy,

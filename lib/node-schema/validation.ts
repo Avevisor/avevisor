@@ -32,13 +32,6 @@ export function validateFlowGraph(input: {
     }
   }
 
-  const traderNodes = input.nodes.filter(
-    (n) => (n.data?.nodeType as AgentNodeType | undefined) === "trader",
-  );
-  for (const _ of traderNodes) {
-    /* trader-specific validation happens in guardrails with run context */
-  }
-
   if (errors.length) return { ok: false, errors };
   return { ok: true };
 }
