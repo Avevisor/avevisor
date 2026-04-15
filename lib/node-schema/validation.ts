@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { agentNodeConfigSchemaByType } from "./contracts";
 import type { AgentNodeType } from "./types";
 
 const agentNodeTypeSchema = z.enum([
@@ -14,7 +15,11 @@ const agentNodeTypeSchema = z.enum([
 
 /** Validates that the graph has exactly one supervisor root and basic edge rules. */
 export function validateFlowGraph(input: {
-  nodes: Array<{ id: string; type?: string; data?: { nodeType?: string } }>;
+  nodes: Array<{
+    id: string;
+    type?: string;
+    data?: { nodeType?: string; config?: unknown };
+  }>;
   edges: Array<{ source: string; target: string }>;
 }): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = [];
@@ -29,6 +34,25 @@ export function validateFlowGraph(input: {
   for (const e of input.edges) {
     if (!ids.has(e.source) || !ids.has(e.target)) {
       errors.push(`Edge references unknown node: ${e.source} -> ${e.target}`);
+    }
+  }
+
+  for (const n of input.nodes) {
+    const nodeType = parseAgentNodeType(n.data?.nodeType);
+    if (!nodeType) {
+      errors.push(`Node ${n.id} has unsupported nodeType.`);
+      continue;
+    }
+    const schema = agentNodeConfigSchemaByType[nodeType];
+    const parsed = schema.safeParse(n.data?.config ?? {});
+    if (!parsed.success) {
+      const issueText = parsed.error.issues
+        .map((issue) => {
+          const path = issue.path.length ? issue.path.join(".") : "config";
+          return `${path}: ${issue.message}`;
+        })
+        .join("; ");
+      errors.push(`Node ${n.id} (${nodeType}) config invalid: ${issueText}`);
     }
   }
 

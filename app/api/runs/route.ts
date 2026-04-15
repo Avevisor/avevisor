@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     const { nodes, edges, objective, dryRun, confirmLive } = parsed.data;
     const v = validateFlowGraph({
-      nodes: nodes as { id: string; data?: { nodeType?: string } }[],
+      nodes: nodes as { id: string; data?: { nodeType?: string; config?: unknown } }[],
       edges: edges as { source: string; target: string }[],
     });
     if (!v.ok) {

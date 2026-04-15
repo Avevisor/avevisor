@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { getDefaultNodeConfig } from "@/lib/node-schema/contracts";
 import type { AgentNodeType } from "@/lib/node-schema/types";
 import { validateFlowGraph } from "@/lib/node-schema/validation";
 import {
@@ -152,7 +153,7 @@ function FlowCanvasInner() {
         data: {
           label,
           nodeType,
-          config: defaultConfig(nodeType),
+          config: getDefaultNodeConfig(nodeType),
         } satisfies AgentNodeData,
       };
       setNodes((nds) => nds.concat(newNode));
@@ -200,7 +201,7 @@ function FlowCanvasInner() {
     const v = validateFlowGraph({
       nodes: nodes.map((n) => ({
         id: n.id,
-        data: n.data as { nodeType?: string },
+                data: n.data as { nodeType?: string; config?: unknown },
       })),
       edges: edges.map((e) => ({ source: e.source, target: e.target })),
     });
@@ -218,8 +219,13 @@ function FlowCanvasInner() {
       const sup = nodes.find(
         (n) => (n.data as AgentNodeData).nodeType === "supervisor",
       );
-      const objective = (sup?.data as AgentNodeData | undefined)?.config
-        ?.objective as string | undefined;
+      const supervisorConfig = (sup?.data as AgentNodeData | undefined)?.config;
+      const objective =
+        supervisorConfig &&
+        typeof supervisorConfig === "object" &&
+        typeof (supervisorConfig as { objective?: unknown }).objective === "string"
+          ? ((supervisorConfig as { objective?: string }).objective ?? undefined)
+          : undefined;
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -362,34 +368,4 @@ export function FlowCanvas() {
       <FlowCanvasInner />
     </ReactFlowProvider>
   );
-}
-
-function defaultConfig(type: AgentNodeType): Record<string, unknown> {
-  switch (type) {
-    case "supervisor":
-      return { objective: "Coordinate AVE trading workflow" };
-    case "researcher":
-      return { topics: "Token fundamentals, social, docs" };
-    case "monitor":
-      return { chain: "solana", walletAddress: "", tokenId: "" };
-    case "strategist":
-      return { riskNotes: "Conservative sizing" };
-    case "trader":
-      return {
-        chain: "solana",
-        assetsId: "",
-        inTokenAddress: "sol",
-        outTokenAddress: "",
-        inAmount: "1000000",
-        swapType: "buy",
-        slippageBps: "500",
-        useMev: false,
-      };
-    case "wallet":
-      return { assetsName: "demo-delegate" };
-    case "tool":
-      return { toolId: "x-api", mcpEndpoint: "" };
-    default:
-      return {};
-  }
 }

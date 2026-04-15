@@ -9,7 +9,7 @@ import type { AgentNodeType } from "@/lib/node-schema/types";
 export interface AgentNodeData extends Record<string, unknown> {
   label: string;
   nodeType: AgentNodeType;
-  config?: Record<string, unknown>;
+  config?: unknown;
 }
 
 const typeColors: Record<AgentNodeType, string> = {

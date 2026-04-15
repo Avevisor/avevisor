@@ -41,7 +41,11 @@ export function NodeSettingsPanel({
 
   const selectedNode = node;
   const d = selectedNode.data as AgentNodeData;
-  const cfg = { ...(d.config ?? {}) } as Record<string, string | boolean | number>;
+  const cfgSource =
+    d.config && typeof d.config === "object"
+      ? (d.config as Record<string, unknown>)
+      : {};
+  const cfg = { ...cfgSource } as Record<string, string | boolean | number>;
   const nodeId = selectedNode.id;
 
   function setField(key: string, value: string | boolean | number) {

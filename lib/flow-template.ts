@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 
+import { getDefaultNodeConfig } from "@/lib/node-schema/contracts";
 import type { AgentNodeType } from "@/lib/node-schema/types";
 
 /** Stable id so reset/hydration always refers to the same Supervisor node. */
@@ -10,7 +11,7 @@ function makeNode(
   nodeType: AgentNodeType,
   label: string,
   position: { x: number; y: number },
-  config: Record<string, unknown> = {},
+  config: unknown = {},
 ): Node {
   return {
     id,
@@ -29,9 +30,13 @@ function makeNode(
  */
 export function getDefaultFlowTemplate(): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [
-    makeNode(SUPERVISOR_NODE_ID, "supervisor", "Supervisor", { x: 280, y: 160 }, {
-      objective: "Coordinate AVE trading workflow",
-    }),
+    makeNode(
+      SUPERVISOR_NODE_ID,
+      "supervisor",
+      "Supervisor",
+      { x: 280, y: 160 },
+      getDefaultNodeConfig("supervisor"),
+    ),
   ];
   return { nodes, edges: [] };
 }
