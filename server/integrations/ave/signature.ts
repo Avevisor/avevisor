@@ -1,14 +1,10 @@
 import crypto from "node:crypto";
 
 /**
- * RFC3339Nano-style UTC timestamp used in AVE-ACCESS-TIMESTAMP header.
+ * UTC timestamp for AVE-ACCESS-TIMESTAMP (ISO-8601; matches AVE examples).
  */
 export function createAveAccessTimestamp(): string {
-  const d = new Date();
-  return d.toISOString().replace(/\.\d{3}Z$/, (m) => {
-    const frac = m.slice(1, -1);
-    return `.${frac.padEnd(9, "0")}Z`;
-  });
+  return new Date().toISOString();
 }
 
 /**
