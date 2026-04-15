@@ -82,6 +82,14 @@ function isNoEndpointModelError(errorText: string): boolean {
   return errorText.includes("No endpoints found for");
 }
 
+function parseHermesMaxTokens(): number | undefined {
+  const raw = process.env.HERMES_MAX_TOKENS?.trim();
+  if (!raw) return 4096;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 4096;
+  return Math.floor(parsed);
+}
+
 function buildMockResponse(params: {
   role: HermesRole;
   userPrompt: string;
@@ -114,6 +122,7 @@ export async function runHermesRole(params: {
   const useResponses = process.env.HERMES_USE_RESPONSES === "true";
   const primaryModel = process.env.HERMES_MODEL?.trim() || "hermes";
   const fallbackModel = process.env.HERMES_MODEL_FALLBACK?.trim() || "hermes";
+  const maxTokens = parseHermesMaxTokens();
 
   if (!apiUrl) {
     return buildMockResponse({
@@ -140,6 +149,7 @@ export async function runHermesRole(params: {
         { role: "user", content: userMessage },
       ],
       conversation: `avevisor-${params.runId}`,
+      ...(maxTokens ? { max_output_tokens: maxTokens } : {}),
     };
     if (previousResponseId) {
       responseBody.previous_response_id = previousResponseId;
@@ -230,6 +240,7 @@ export async function runHermesRole(params: {
         content: userMessage,
       },
     ],
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
   };
 
   const chatCompletionsUrl = `${baseUrl}/chat/completions`;

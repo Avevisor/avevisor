@@ -42,6 +42,168 @@ function getConfig<T>(n: Node): T {
   return ((n.data as { config?: T })?.config ?? {}) as T;
 }
 
+type MonitorSentiment = "bullish" | "bearish" | "neutral";
+
+interface MonitorHermesPayload {
+  alerts: string[];
+  sentiment: MonitorSentiment;
+}
+
+interface ResearcherHermesPayload {
+  findings: string[];
+  risks: string[];
+  followUps: string[];
+}
+
+interface StrategistHermesPayload {
+  thesis: string;
+  actions: string[];
+  riskControls: string[];
+}
+
+type TraderDecision = "execute" | "hold";
+
+interface TraderHermesPayload {
+  decision: TraderDecision;
+  reason: string;
+  checks: string[];
+}
+
+function tryParseJsonObject(text: string): unknown | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Fall through and try fenced JSON / object extraction.
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    try {
+      return JSON.parse(fencedMatch[1].trim());
+    } catch {
+      // Fall through and try brace extraction.
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+  } catch {
+    return null;
+  }
+}
+
+function toMonitorHermesPayload(value: unknown): MonitorHermesPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { alerts?: unknown; sentiment?: unknown };
+  if (
+    !Array.isArray(candidate.alerts) ||
+    !candidate.alerts.every((item) => typeof item === "string")
+  ) {
+    return null;
+  }
+  if (
+    candidate.sentiment !== "bullish" &&
+    candidate.sentiment !== "bearish" &&
+    candidate.sentiment !== "neutral"
+  ) {
+    return null;
+  }
+
+  return {
+    alerts: candidate.alerts,
+    sentiment: candidate.sentiment,
+  };
+}
+
+function parseMonitorHermesPayload(text: string): MonitorHermesPayload | null {
+  const parsed = tryParseJsonObject(text);
+  return toMonitorHermesPayload(parsed);
+}
+
+function toResearcherHermesPayload(value: unknown): ResearcherHermesPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as {
+    findings?: unknown;
+    risks?: unknown;
+    followUps?: unknown;
+  };
+  if (!Array.isArray(candidate.findings) || !candidate.findings.every((item) => typeof item === "string"))
+    return null;
+  if (!Array.isArray(candidate.risks) || !candidate.risks.every((item) => typeof item === "string"))
+    return null;
+  if (!Array.isArray(candidate.followUps) || !candidate.followUps.every((item) => typeof item === "string"))
+    return null;
+
+  return {
+    findings: candidate.findings,
+    risks: candidate.risks,
+    followUps: candidate.followUps,
+  };
+}
+
+function parseResearcherHermesPayload(text: string): ResearcherHermesPayload | null {
+  const parsed = tryParseJsonObject(text);
+  return toResearcherHermesPayload(parsed);
+}
+
+function toStrategistHermesPayload(value: unknown): StrategistHermesPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as {
+    thesis?: unknown;
+    actions?: unknown;
+    riskControls?: unknown;
+  };
+  if (typeof candidate.thesis !== "string" || !candidate.thesis.trim()) return null;
+  if (!Array.isArray(candidate.actions) || !candidate.actions.every((item) => typeof item === "string"))
+    return null;
+  if (
+    !Array.isArray(candidate.riskControls) ||
+    !candidate.riskControls.every((item) => typeof item === "string")
+  ) {
+    return null;
+  }
+
+  return {
+    thesis: candidate.thesis,
+    actions: candidate.actions,
+    riskControls: candidate.riskControls,
+  };
+}
+
+function parseStrategistHermesPayload(text: string): StrategistHermesPayload | null {
+  const parsed = tryParseJsonObject(text);
+  return toStrategistHermesPayload(parsed);
+}
+
+function toTraderHermesPayload(value: unknown): TraderHermesPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { decision?: unknown; reason?: unknown; checks?: unknown };
+  if (candidate.decision !== "execute" && candidate.decision !== "hold") return null;
+  if (typeof candidate.reason !== "string" || !candidate.reason.trim()) return null;
+  if (!Array.isArray(candidate.checks) || !candidate.checks.every((item) => typeof item === "string"))
+    return null;
+
+  return {
+    decision: candidate.decision,
+    reason: candidate.reason,
+    checks: candidate.checks,
+  };
+}
+
+function parseTraderHermesPayload(text: string): TraderHermesPayload | null {
+  const parsed = tryParseJsonObject(text);
+  return toTraderHermesPayload(parsed);
+}
+
 /**
  * Executes the flow: Monitor → Researcher → Strategist → Hermes supervisor pass → Trader/Wallet.
  */
@@ -125,11 +287,44 @@ export async function executeFlow(params: {
         contextJson: parts,
         runId: params.runId,
       });
+      let finalSub = sub;
+      let monitorPayload = parseMonitorHermesPayload(sub.text);
+      let reparsed = false;
+
+      if (!monitorPayload) {
+        reparsed = true;
+        const retrySub = await runHermesRole({
+          role: "monitor",
+          userPrompt:
+            "Return STRICT JSON only with shape {\"alerts\": string[], \"sentiment\": \"bullish\"|\"bearish\"|\"neutral\"}. No markdown.",
+          contextJson: {
+            monitor: parts,
+            previous_response: sub.text,
+          },
+          runId: params.runId,
+        });
+        finalSub = retrySub;
+        monitorPayload = parseMonitorHermesPayload(retrySub.text);
+      }
+
+      const safeMonitorPayload: MonitorHermesPayload = monitorPayload ?? {
+        alerts: ["Monitor response format invalid; using safe neutral fallback."],
+        sentiment: "neutral",
+      };
+
       logs.push({
         nodeId: n.id,
         nodeType: "monitor",
         status: "ok",
-        output: { data: parts, hermes: sub },
+        output: {
+          data: parts,
+          hermes: {
+            ...finalSub,
+            parsed: safeMonitorPayload,
+            validFormat: !!monitorPayload,
+            reparsed,
+          },
+        },
         startedAt,
         endedAt: nowIso(),
       });
@@ -156,12 +351,43 @@ export async function executeFlow(params: {
         contextJson: { monitor: monitorBundle },
         runId: params.runId,
       });
-      researchBundle = { ...researchBundle as object, [n.id]: sub.text };
+      let finalSub = sub;
+      let researcherPayload = parseResearcherHermesPayload(sub.text);
+      let reparsed = false;
+
+      if (!researcherPayload) {
+        reparsed = true;
+        const retrySub = await runHermesRole({
+          role: "researcher",
+          userPrompt:
+            "Return STRICT JSON only with shape {\"findings\": string[], \"risks\": string[], \"followUps\": string[]}. No markdown.",
+          contextJson: {
+            monitor: monitorBundle,
+            previous_response: sub.text,
+          },
+          runId: params.runId,
+        });
+        finalSub = retrySub;
+        researcherPayload = parseResearcherHermesPayload(retrySub.text);
+      }
+
+      const safeResearcherPayload: ResearcherHermesPayload = researcherPayload ?? {
+        findings: ["Researcher response format invalid; no reliable findings extracted."],
+        risks: ["Model output contract violation."],
+        followUps: ["Retry researcher phase with tighter prompt constraints."],
+      };
+
+      researchBundle = { ...researchBundle as object, [n.id]: safeResearcherPayload };
       logs.push({
         nodeId: n.id,
         nodeType: "researcher",
         status: "ok",
-        output: sub,
+        output: {
+          ...finalSub,
+          parsed: safeResearcherPayload,
+          validFormat: !!researcherPayload,
+          reparsed,
+        },
         startedAt,
         endedAt: nowIso(),
       });
@@ -187,12 +413,44 @@ export async function executeFlow(params: {
         contextJson: { monitor: monitorBundle, research: researchBundle },
         runId: params.runId,
       });
-      strategyBundle = { ...strategyBundle as object, [n.id]: sub.text };
+      let finalSub = sub;
+      let strategistPayload = parseStrategistHermesPayload(sub.text);
+      let reparsed = false;
+
+      if (!strategistPayload) {
+        reparsed = true;
+        const retrySub = await runHermesRole({
+          role: "strategist",
+          userPrompt:
+            "Return STRICT JSON only with shape {\"thesis\": string, \"actions\": string[], \"riskControls\": string[]}. No markdown.",
+          contextJson: {
+            monitor: monitorBundle,
+            research: researchBundle,
+            previous_response: sub.text,
+          },
+          runId: params.runId,
+        });
+        finalSub = retrySub;
+        strategistPayload = parseStrategistHermesPayload(retrySub.text);
+      }
+
+      const safeStrategistPayload: StrategistHermesPayload = strategistPayload ?? {
+        thesis: "Strategy response format invalid; fallback to no-action stance.",
+        actions: ["Hold position until valid structured strategy is available."],
+        riskControls: ["Do not execute live trade from unstructured strategist output."],
+      };
+
+      strategyBundle = { ...strategyBundle as object, [n.id]: safeStrategistPayload };
       logs.push({
         nodeId: n.id,
         nodeType: "strategist",
         status: "ok",
-        output: sub,
+        output: {
+          ...finalSub,
+          parsed: safeStrategistPayload,
+          validFormat: !!strategistPayload,
+          reparsed,
+        },
         startedAt,
         endedAt: nowIso(),
       });
@@ -332,6 +590,37 @@ export async function executeFlow(params: {
         runId: params.runId,
       });
 
+      let finalTraderHermes = traderHermes;
+      let traderPayload = parseTraderHermesPayload(traderHermes.text);
+      let reparsed = false;
+
+      if (!traderPayload) {
+        reparsed = true;
+        const retrySub = await runHermesRole({
+          role: "trader",
+          userPrompt:
+            "Return STRICT JSON only with shape {\"decision\": \"execute\"|\"hold\", \"reason\": string, \"checks\": string[]}. No markdown.",
+          contextJson: {
+            objective: params.objective ?? null,
+            config: cfg,
+            monitor: monitorBundle,
+            research: researchBundle,
+            strategy: strategyBundle,
+            supervisor: supervisorHermesText ?? null,
+            previous_response: traderHermes.text,
+          },
+          runId: params.runId,
+        });
+        finalTraderHermes = retrySub;
+        traderPayload = parseTraderHermesPayload(retrySub.text);
+      }
+
+      const safeTraderPayload: TraderHermesPayload = traderPayload ?? {
+        decision: "hold",
+        reason: "Trader response format invalid; defaulting to hold for safety.",
+        checks: ["Do not submit live orders from unstructured trader output."],
+      };
+
       if (isDryRun) {
         logs.push({
           nodeId: n.id,
@@ -340,7 +629,12 @@ export async function executeFlow(params: {
           output: {
             dryRun: true,
             wouldSubmit: cfg,
-            hermes: traderHermes,
+            hermes: {
+              ...finalTraderHermes,
+              parsed: safeTraderPayload,
+              validFormat: !!traderPayload,
+              reparsed,
+            },
           },
           startedAt,
           endedAt: nowIso(),
@@ -354,7 +648,14 @@ export async function executeFlow(params: {
           nodeType: "trader",
           status: "error",
           error: "Delegate credentials missing for live trade",
-          output: { hermes: traderHermes },
+          output: {
+            hermes: {
+              ...finalTraderHermes,
+              parsed: safeTraderPayload,
+              validFormat: !!traderPayload,
+              reparsed,
+            },
+          },
           startedAt,
           endedAt: nowIso(),
         });
@@ -397,7 +698,16 @@ export async function executeFlow(params: {
         nodeId: n.id,
         nodeType: "trader",
         status: "ok",
-        output: { hermes: traderHermes, swap: swapRes, botswap },
+        output: {
+          hermes: {
+            ...finalTraderHermes,
+            parsed: safeTraderPayload,
+            validFormat: !!traderPayload,
+            reparsed,
+          },
+          swap: swapRes,
+          botswap,
+        },
         startedAt,
         endedAt: nowIso(),
       });
