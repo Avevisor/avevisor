@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { validateFlowGraph } from "@/lib/node-schema/validation";
+import { normalizeFlowNodesConfig, validateFlowGraph } from "@/lib/node-schema/validation";
 import { executeFlow } from "@/server/orchestrator/run-engine";
 
 export const runtime = "nodejs";
@@ -30,9 +30,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const { nodes, edges, objective, dryRun, confirmLive } = parsed.data;
+    const { edges, objective, dryRun, confirmLive } = parsed.data;
+    const normalizedNodes = normalizeFlowNodesConfig(
+      parsed.data.nodes as Array<{
+        id: string;
+        data?: { nodeType?: string; config?: unknown };
+      }>,
+    );
     const v = validateFlowGraph({
-      nodes: nodes as { id: string; data?: { nodeType?: string; config?: unknown } }[],
+      nodes: normalizedNodes as {
+        id: string;
+        data?: { nodeType?: string; config?: unknown };
+      }[],
       edges: edges as { source: string; target: string }[],
     });
     if (!v.ok) {
@@ -42,7 +51,7 @@ export async function POST(req: Request) {
     const runId = randomUUID();
     const result = await executeFlow({
       runId,
-      nodes: nodes as never[],
+      nodes: normalizedNodes as never[],
       edges: edges as never[],
       objective,
       dryRun,

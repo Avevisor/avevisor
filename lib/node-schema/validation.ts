@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { agentNodeConfigSchemaByType } from "./contracts";
+import { agentNodeConfigSchemaByType, coerceNodeConfig } from "./contracts";
 import type { AgentNodeType } from "./types";
 
 const agentNodeTypeSchema = z.enum([
@@ -63,4 +63,22 @@ export function validateFlowGraph(input: {
 export function parseAgentNodeType(value: unknown): AgentNodeType | null {
   const r = agentNodeTypeSchema.safeParse(value);
   return r.success ? r.data : null;
+}
+
+export function normalizeFlowNodesConfig(
+  nodes: Array<{ id: string; data?: { nodeType?: string; config?: unknown } }>,
+): Array<{ id: string; data?: { nodeType?: string; config?: unknown } }> {
+  return nodes.map((node) => {
+    const nodeType = parseAgentNodeType(node.data?.nodeType);
+    if (!nodeType) return node;
+    const normalizedConfig = coerceNodeConfig(nodeType, node.data?.config ?? {});
+    return {
+      ...node,
+      data: {
+        ...(node.data ?? {}),
+        nodeType,
+        config: normalizedConfig,
+      },
+    };
+  });
 }

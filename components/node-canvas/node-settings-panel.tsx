@@ -5,6 +5,8 @@ import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SUPERVISOR_NODE_ID } from "@/lib/flow-template";
+import { coerceNodeConfig } from "@/lib/node-schema/contracts";
+import type { AgentNodeConfigByType, AgentNodeType } from "@/lib/node-schema/types";
 
 import type { AgentNodeData } from "./agent-node";
 
@@ -41,17 +43,21 @@ export function NodeSettingsPanel({
 
   const selectedNode = node;
   const d = selectedNode.data as AgentNodeData;
-  const cfgSource =
-    d.config && typeof d.config === "object"
-      ? (d.config as Record<string, unknown>)
-      : {};
-  const cfg = { ...cfgSource } as Record<string, string | boolean | number>;
+  const cfg = coerceNodeConfig(d.nodeType, d.config ?? {}) as Record<
+    string,
+    string | boolean | number | undefined
+  >;
   const nodeId = selectedNode.id;
 
-  function setField(key: string, value: string | boolean | number) {
+  function setField<TNodeType extends AgentNodeType>(
+    nodeType: TNodeType,
+    key: keyof AgentNodeConfigByType[TNodeType],
+    value: AgentNodeConfigByType[TNodeType][keyof AgentNodeConfigByType[TNodeType]],
+  ) {
+    const current = coerceNodeConfig(nodeType, d.config ?? {});
     onChange(nodeId, {
       ...d,
-      config: { ...cfg, [key]: value },
+      config: { ...current, [key]: value },
     });
   }
 
@@ -81,7 +87,7 @@ export function NodeSettingsPanel({
             <textarea
               className="min-h-[80px] rounded-md border border-input bg-background px-2 py-1.5"
               value={String(cfg.objective ?? "")}
-              onChange={(e) => setField("objective", e.target.value)}
+              onChange={(e) => setField("supervisor", "objective", e.target.value)}
             />
           </label>
         )}
@@ -92,7 +98,7 @@ export function NodeSettingsPanel({
             <input
               className="rounded-md border border-input bg-background px-2 py-1.5"
               value={String(cfg.topics ?? "")}
-              onChange={(e) => setField("topics", e.target.value)}
+              onChange={(e) => setField("researcher", "topics", e.target.value)}
             />
           </label>
         )}
@@ -104,7 +110,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.chain ?? "solana")}
-                onChange={(e) => setField("chain", e.target.value)}
+                onChange={(e) => setField("monitor", "chain", e.target.value)}
               />
             </label>
             <label className="grid gap-1">
@@ -112,7 +118,9 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.walletAddress ?? "")}
-                onChange={(e) => setField("walletAddress", e.target.value)}
+                onChange={(e) =>
+                  setField("monitor", "walletAddress", e.target.value)
+                }
               />
             </label>
             <label className="grid gap-1">
@@ -121,7 +129,7 @@ export function NodeSettingsPanel({
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 placeholder="Mint-solana"
                 value={String(cfg.tokenId ?? "")}
-                onChange={(e) => setField("tokenId", e.target.value)}
+                onChange={(e) => setField("monitor", "tokenId", e.target.value)}
               />
             </label>
           </>
@@ -133,7 +141,7 @@ export function NodeSettingsPanel({
             <input
               className="rounded-md border border-input bg-background px-2 py-1.5"
               value={String(cfg.riskNotes ?? "")}
-              onChange={(e) => setField("riskNotes", e.target.value)}
+              onChange={(e) => setField("strategist", "riskNotes", e.target.value)}
             />
           </label>
         )}
@@ -145,7 +153,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.chain ?? "")}
-                onChange={(e) => setField("chain", e.target.value)}
+                onChange={(e) => setField("trader", "chain", e.target.value)}
               />
             </label>
             <label className="grid gap-1">
@@ -153,7 +161,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.assetsId ?? "")}
-                onChange={(e) => setField("assetsId", e.target.value)}
+                onChange={(e) => setField("trader", "assetsId", e.target.value)}
               />
             </label>
             <label className="grid gap-1">
@@ -161,7 +169,9 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.inTokenAddress ?? "")}
-                onChange={(e) => setField("inTokenAddress", e.target.value)}
+                onChange={(e) =>
+                  setField("trader", "inTokenAddress", e.target.value)
+                }
               />
             </label>
             <label className="grid gap-1">
@@ -169,7 +179,9 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.outTokenAddress ?? "")}
-                onChange={(e) => setField("outTokenAddress", e.target.value)}
+                onChange={(e) =>
+                  setField("trader", "outTokenAddress", e.target.value)
+                }
               />
             </label>
             <label className="grid gap-1">
@@ -177,7 +189,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.inAmount ?? "")}
-                onChange={(e) => setField("inAmount", e.target.value)}
+                onChange={(e) => setField("trader", "inAmount", e.target.value)}
               />
             </label>
             <label className="grid gap-1">
@@ -185,7 +197,9 @@ export function NodeSettingsPanel({
               <select
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.swapType ?? "buy")}
-                onChange={(e) => setField("swapType", e.target.value)}
+                onChange={(e) =>
+                  setField("trader", "swapType", e.target.value as "buy" | "sell")
+                }
               >
                 <option value="buy">buy</option>
                 <option value="sell">sell</option>
@@ -196,14 +210,16 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.slippageBps ?? "500")}
-                onChange={(e) => setField("slippageBps", e.target.value)}
+                onChange={(e) =>
+                  setField("trader", "slippageBps", e.target.value)
+                }
               />
             </label>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={Boolean(cfg.useMev)}
-                onChange={(e) => setField("useMev", e.target.checked)}
+                onChange={(e) => setField("trader", "useMev", e.target.checked)}
               />
               <span className="text-muted-foreground">useMev</span>
             </label>
@@ -216,7 +232,7 @@ export function NodeSettingsPanel({
             <input
               className="rounded-md border border-input bg-background px-2 py-1.5"
               value={String(cfg.assetsName ?? "")}
-              onChange={(e) => setField("assetsName", e.target.value)}
+              onChange={(e) => setField("wallet", "assetsName", e.target.value)}
             />
           </label>
         )}
@@ -228,7 +244,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.toolId ?? "")}
-                onChange={(e) => setField("toolId", e.target.value)}
+                onChange={(e) => setField("tool", "toolId", e.target.value)}
               />
             </label>
             <label className="grid gap-1">
@@ -236,7 +252,7 @@ export function NodeSettingsPanel({
               <input
                 className="rounded-md border border-input bg-background px-2 py-1.5"
                 value={String(cfg.mcpEndpoint ?? "")}
-                onChange={(e) => setField("mcpEndpoint", e.target.value)}
+                onChange={(e) => setField("tool", "mcpEndpoint", e.target.value)}
               />
             </label>
           </>

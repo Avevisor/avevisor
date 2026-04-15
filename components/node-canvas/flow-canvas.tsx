@@ -22,7 +22,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getDefaultNodeConfig } from "@/lib/node-schema/contracts";
 import type { AgentNodeType } from "@/lib/node-schema/types";
-import { validateFlowGraph } from "@/lib/node-schema/validation";
+import {
+  normalizeFlowNodesConfig,
+  validateFlowGraph,
+} from "@/lib/node-schema/validation";
 import {
   FLOW_STORAGE_KEY,
   getDefaultFlowTemplate,
@@ -64,7 +67,10 @@ function enforceSingleSupervisor(input: {
   if (supervisors.length !== 1) return getDefaultFlowTemplate();
   const supervisor = supervisors[0];
   if (supervisor.id !== SUPERVISOR_NODE_ID) return getDefaultFlowTemplate();
-  return input;
+  return {
+    nodes: normalizeFlowNodesConfig(input.nodes) as Node[],
+    edges: input.edges,
+  };
 }
 
 /**
@@ -230,7 +236,9 @@ function FlowCanvasInner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nodes,
+          nodes: normalizeFlowNodesConfig(
+            nodes as Array<{ id: string; data?: { nodeType?: string; config?: unknown } }>,
+          ) as Node[],
           edges,
           objective,
           dryRun,
@@ -247,7 +255,12 @@ function FlowCanvasInner() {
   }, [nodes, edges, dryRun, confirmLive]);
 
   const handleSave = useCallback(() => {
-    persist(nodes, edges);
+    persist(
+      normalizeFlowNodesConfig(
+        nodes as Array<{ id: string; data?: { nodeType?: string; config?: unknown } }>,
+      ) as Node[],
+      edges,
+    );
     setValidation("Saved to browser storage.");
   }, [nodes, edges, persist]);
 
