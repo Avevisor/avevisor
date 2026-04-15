@@ -78,6 +78,10 @@ function getHermesUpstreamErrorText(text: string): string | null {
   return null;
 }
 
+function isNoEndpointModelError(errorText: string): boolean {
+  return errorText.includes("No endpoints found for");
+}
+
 function buildMockResponse(params: {
   role: HermesRole;
   userPrompt: string;
@@ -108,6 +112,8 @@ export async function runHermesRole(params: {
   const apiUrl = process.env.HERMES_API_URL?.trim();
   const apiKey = process.env.HERMES_API_KEY?.trim();
   const useResponses = process.env.HERMES_USE_RESPONSES === "true";
+  const primaryModel = process.env.HERMES_MODEL?.trim() || "hermes";
+  const fallbackModel = process.env.HERMES_MODEL_FALLBACK?.trim() || "hermes";
 
   if (!apiUrl) {
     return buildMockResponse({
@@ -128,7 +134,7 @@ export async function runHermesRole(params: {
   if (useResponses && params.role === "supervisor" && params.runId) {
     const previousResponseId = supervisorResponseIdByRun.get(params.runId);
     const responseBody: Record<string, unknown> = {
-      model: process.env.HERMES_MODEL ?? "hermes",
+      model: primaryModel,
       input: [
         { role: "system", content: system },
         { role: "user", content: userMessage },
@@ -169,28 +175,54 @@ export async function runHermesRole(params: {
       throw new Error(`Hermes responses HTTP ${responseRes.status}: ${t}`);
     }
 
-    const data = (await responseRes.json()) as HermesResponsesApiResponse;
+    let data = (await responseRes.json()) as HermesResponsesApiResponse;
     if (data.id) {
       supervisorResponseIdByRun.set(params.runId, data.id);
     }
-    const text = extractResponsesApiText(data);
+    let text = extractResponsesApiText(data);
     const upstreamError = getHermesUpstreamErrorText(text);
-    if (upstreamError) {
+    if (
+      upstreamError &&
+      isNoEndpointModelError(upstreamError) &&
+      fallbackModel !== primaryModel
+    ) {
+      const retryBody = {
+        ...responseBody,
+        model: fallbackModel,
+      };
+      const retryRes = await fetch(responsesUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify(retryBody),
+      });
+      if (retryRes.ok) {
+        data = (await retryRes.json()) as HermesResponsesApiResponse;
+        if (data.id) {
+          supervisorResponseIdByRun.set(params.runId, data.id);
+        }
+        text = extractResponsesApiText(data);
+      }
+    }
+    const retryUpstreamError = getHermesUpstreamErrorText(text);
+    if (retryUpstreamError) {
       if (shouldFallbackToMockOnFetchError()) {
         return buildMockResponse({
           role: params.role,
           userPrompt: params.userPrompt,
           contextJson: params.contextJson,
-          note: `Hermes upstream model/provider error, used mock fallback: ${upstreamError}`,
+          note: `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`,
         });
       }
-      throw new Error(`Hermes upstream model/provider error: ${upstreamError}`);
+      throw new Error(`Hermes upstream model/provider error: ${retryUpstreamError}`);
     }
     return { text, mock: false };
   }
 
   const body = {
-    model: process.env.HERMES_MODEL ?? "hermes",
+    model: primaryModel,
     messages: [
       { role: "system", content: system },
       {
@@ -230,19 +262,40 @@ export async function runHermesRole(params: {
     throw new Error(`Hermes HTTP ${res.status}: ${t}`);
   }
 
-  const data = (await res.json()) as HermesCompletionResponse;
-  const text = data.choices?.[0]?.message?.content ?? "";
+  let data = (await res.json()) as HermesCompletionResponse;
+  let text = data.choices?.[0]?.message?.content ?? "";
   const upstreamError = getHermesUpstreamErrorText(text);
-  if (upstreamError) {
+  if (
+    upstreamError &&
+    isNoEndpointModelError(upstreamError) &&
+    fallbackModel !== primaryModel
+  ) {
+    const retryBody = { ...body, model: fallbackModel };
+    const retryRes = await fetch(chatCompletionsUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(retryBody),
+    });
+    if (retryRes.ok) {
+      data = (await retryRes.json()) as HermesCompletionResponse;
+      text = data.choices?.[0]?.message?.content ?? "";
+    }
+  }
+
+  const retryUpstreamError = getHermesUpstreamErrorText(text);
+  if (retryUpstreamError) {
     if (shouldFallbackToMockOnFetchError()) {
       return buildMockResponse({
         role: params.role,
         userPrompt: params.userPrompt,
         contextJson: params.contextJson,
-        note: `Hermes upstream model/provider error, used mock fallback: ${upstreamError}`,
+        note: `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`,
       });
     }
-    throw new Error(`Hermes upstream model/provider error: ${upstreamError}`);
+    throw new Error(`Hermes upstream model/provider error: ${retryUpstreamError}`);
   }
   return { text, mock: false };
 }
