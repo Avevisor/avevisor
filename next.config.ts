@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /** WebSocket client used by delegate `botswap` listener on the server. */
+  serverExternalPackages: ["ws"],
 };
 
 export default nextConfig;
