@@ -18,6 +18,46 @@ const skillByRole: Record<HermesRole, string> = {
   strategist: strategistSkill,
 };
 
+const supervisorResponseIdByRun = new Map<string, string>();
+
+interface HermesCompletionResponse {
+  choices?: Array<{ message?: { content?: string } }>;
+}
+
+interface HermesResponsesApiResponse {
+  id?: string;
+  output_text?: string;
+  output?: Array<{
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
+  }>;
+}
+
+function normalizeHermesApiBase(apiUrl: string): string {
+  const trimmed = apiUrl.trim().replace(/\/+$/, "");
+  if (!trimmed) return trimmed;
+  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
+}
+
+function buildHermesUserMessage(userPrompt: string, contextJson: unknown): string {
+  return `${userPrompt}\n\nContext:\n${JSON.stringify(contextJson ?? {})}`;
+}
+
+function extractResponsesApiText(data: HermesResponsesApiResponse): string {
+  if (typeof data.output_text === "string" && data.output_text.length > 0) {
+    return data.output_text;
+  }
+  const outputText = data.output
+    ?.flatMap((entry) => entry.content ?? [])
+    .filter((content) => content?.type === "output_text" && typeof content.text === "string")
+    .map((content) => content.text ?? "")
+    .join("\n")
+    .trim();
+  return outputText ?? "";
+}
+
 /**
  * Invokes Hermes-compatible HTTP API if configured; otherwise returns structured mock output for demos.
  */
@@ -25,10 +65,12 @@ export async function runHermesRole(params: {
   role: HermesRole;
   userPrompt: string;
   contextJson?: unknown;
+  runId?: string;
 }): Promise<{ text: string; mock: boolean }> {
   const system = skillByRole[params.role];
   const apiUrl = process.env.HERMES_API_URL?.trim();
   const apiKey = process.env.HERMES_API_KEY?.trim();
+  const useResponses = process.env.HERMES_USE_RESPONSES === "true";
 
   if (!apiUrl) {
     return {
@@ -42,18 +84,60 @@ export async function runHermesRole(params: {
     };
   }
 
+  const baseUrl = normalizeHermesApiBase(apiUrl);
+  const userMessage = buildHermesUserMessage(params.userPrompt, params.contextJson);
+
+  if (!baseUrl) {
+    throw new Error("HERMES_API_URL is set but empty after normalization");
+  }
+
+  if (useResponses && params.role === "supervisor" && params.runId) {
+    const previousResponseId = supervisorResponseIdByRun.get(params.runId);
+    const responseBody: Record<string, unknown> = {
+      model: process.env.HERMES_MODEL ?? "hermes",
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: userMessage },
+      ],
+      conversation: `avevisor-${params.runId}`,
+    };
+    if (previousResponseId) {
+      responseBody.previous_response_id = previousResponseId;
+    }
+
+    const responseRes = await fetch(`${baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(responseBody),
+    });
+
+    if (!responseRes.ok) {
+      const t = await responseRes.text();
+      throw new Error(`Hermes responses HTTP ${responseRes.status}: ${t}`);
+    }
+
+    const data = (await responseRes.json()) as HermesResponsesApiResponse;
+    if (data.id) {
+      supervisorResponseIdByRun.set(params.runId, data.id);
+    }
+    return { text: extractResponsesApiText(data), mock: false };
+  }
+
   const body = {
     model: process.env.HERMES_MODEL ?? "hermes",
     messages: [
       { role: "system", content: system },
       {
         role: "user",
-        content: `${params.userPrompt}\n\nContext:\n${JSON.stringify(params.contextJson ?? {})}`,
+        content: userMessage,
       },
     ],
   };
 
-  const res = await fetch(`${apiUrl.replace(/\/$/, "")}/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -67,9 +151,7 @@ export async function runHermesRole(params: {
     throw new Error(`Hermes HTTP ${res.status}: ${t}`);
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  const data = (await res.json()) as HermesCompletionResponse;
   const text = data.choices?.[0]?.message?.content ?? "";
   return { text, mock: false };
 }

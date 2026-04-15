@@ -122,6 +122,7 @@ export async function executeFlow(params: {
         role: "monitor",
         userPrompt: params.objective ?? "Summarize monitor output.",
         contextJson: parts,
+        runId: params.runId,
       });
       logs.push({
         nodeId: n.id,
@@ -152,6 +153,7 @@ export async function executeFlow(params: {
         role: "researcher",
         userPrompt: cfg.topics ?? params.objective ?? "Research context.",
         contextJson: { monitor: monitorBundle },
+        runId: params.runId,
       });
       researchBundle = { ...researchBundle as object, [n.id]: sub.text };
       logs.push({
@@ -182,6 +184,7 @@ export async function executeFlow(params: {
         role: "strategist",
         userPrompt: params.objective ?? "Propose strategy.",
         contextJson: { monitor: monitorBundle, research: researchBundle },
+        runId: params.runId,
       });
       strategyBundle = { ...strategyBundle as object, [n.id]: sub.text };
       logs.push({
@@ -221,6 +224,7 @@ export async function executeFlow(params: {
             config: getConfig(t),
           })),
         },
+        runId: params.runId,
       });
       logs.push({
         nodeId: sup.id,
@@ -393,13 +397,27 @@ export async function executeFlow(params: {
 
   /** Tool nodes — logged as passthrough for MCP (no network in MVP) */
   for (const n of toolNodes) {
+    const config = getConfig<Record<string, unknown>>(n);
+    const audit = {
+      serverId:
+        (typeof config.mcpServerId === "string" && config.mcpServerId) ||
+        (typeof config.serverId === "string" && config.serverId) ||
+        null,
+      url:
+        (typeof config.mcpUrl === "string" && config.mcpUrl) ||
+        (typeof config.url === "string" && config.url) ||
+        null,
+      transport:
+        (typeof config.transport === "string" && config.transport) || null,
+    };
     logs.push({
       nodeId: n.id,
       nodeType: "tool",
       status: "ok",
       output: {
         note: "Connect MCP server in production; config only in MVP.",
-        config: getConfig(n),
+        audit,
+        config,
       },
       startedAt: nowIso(),
       endedAt: nowIso(),
