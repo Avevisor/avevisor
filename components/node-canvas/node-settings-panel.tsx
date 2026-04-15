@@ -1,8 +1,10 @@
 "use client";
 
 import type { Node } from "@xyflow/react";
+import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SUPERVISOR_NODE_ID } from "@/lib/flow-template";
 
 import type { AgentNodeData } from "./agent-node";
 
@@ -13,10 +15,13 @@ export function NodeSettingsPanel({
   node,
   onChange,
   onClose,
+  onDeleteNode,
 }: {
   node: Node | null;
   onChange: (nodeId: string, data: AgentNodeData) => void;
   onClose: () => void;
+  /** Removes the node and its edges after user confirms (not used for Supervisor). */
+  onDeleteNode: (nodeId: string) => void;
 }) {
   if (!node || !node.data) {
     return (
@@ -232,6 +237,31 @@ export function NodeSettingsPanel({
             </label>
           </>
         )}
+      </div>
+
+      <div className="flex justify-end border-t border-border p-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          disabled={nodeId === SUPERVISOR_NODE_ID}
+          title={
+            nodeId === SUPERVISOR_NODE_ID
+              ? "The Supervisor node cannot be deleted"
+              : "Delete this node"
+          }
+          aria-label="Delete node"
+          onClick={() => {
+            if (nodeId === SUPERVISOR_NODE_ID) return;
+            const ok = window.confirm(
+              `Delete “${d.label}” (${d.nodeType})? Connected edges will be removed.`,
+            );
+            if (ok) onDeleteNode(nodeId);
+          }}
+        >
+          <Trash2 className="size-4" aria-hidden />
+        </Button>
       </div>
     </div>
   );

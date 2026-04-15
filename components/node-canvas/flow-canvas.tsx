@@ -155,6 +155,18 @@ function FlowCanvasInner() {
     [setNodes],
   );
 
+  /** Removes a node and any edges touching it; clears selection. */
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      );
+      setSelectedId((id) => (id === nodeId ? null : id));
+    },
+    [setNodes, setEdges],
+  );
+
   const persist = useCallback(
     (n: Node[], e: Edge[]) => {
       localStorage.setItem(
@@ -315,6 +327,7 @@ function FlowCanvasInner() {
           node={selectedNode}
           onChange={updateNodeData}
           onClose={() => setSelectedId(null)}
+          onDeleteNode={deleteNode}
         />
       </div>
     </div>
