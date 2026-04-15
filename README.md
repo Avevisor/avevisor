@@ -1,38 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AVE Node Agent (avevisor)
 
-## Getting Started
+Drag-and-drop **Supervisor → subagents → Trader/Wallet** flow for [AVE.ai](https://ave.ai/) delegate APIs, with optional **Hermes** reasoning and **MCP-ready** tool nodes.
 
-First, run the development server:
+## Quick start
 
 ```bash
+cp .env.example .env.local
+# Edit .env.local — see docs/DEMO_CHECKLIST.md
+
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Home: [http://localhost:3000](http://localhost:3000)
+- Canvas: [http://localhost:3000/canvas](http://localhost:3000/canvas)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features (MVP)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- React Flow canvas with palette, settings panel, validate/run/save.
+- Server orchestration: Monitor (Data API) → Researcher/Strategist/Supervisor (Hermes or mock) → Trader/Wallet (delegate API, guarded). Canvas defaults to one Supervisor; you drag other nodes from the palette.
+- `botswap` WebSocket wait for order status after a live swap (see [docs/DEMO_CHECKLIST.md](docs/DEMO_CHECKLIST.md)).
 
-## Learn More
+## Hermes local terminal setup
 
-To learn more about Next.js, take a look at the following resources:
+1. Start Hermes Agent API Server in your local terminal profile.
+2. Set avevisor `.env.local`:
+   - `HERMES_API_URL=http://127.0.0.1:8642/v1` (or host/port used by your Hermes profile)
+   - `HERMES_API_KEY=<API_SERVER_KEY>`
+   - Optional: `HERMES_USE_RESPONSES=true` to use `/v1/responses` stateful supervisor calls.
+3. Verify with `GET /api/health` (it now reports Hermes reachability probes).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Hermes API server details: [Hermes API Server guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## AVE tool-node baseline
 
-## Deploy on Vercel
+For future MCP/tool-node expansion, use [AveCloud/ave-cloud-skill](https://github.com/AveCloud/ave-cloud-skill) as the baseline for AVE data/trade script behavior before writing custom wrappers.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# avevisor
-# avevisor
+| Command        | Description        |
+| -------------- | ------------------ |
+| `npm run dev`  | Development server |
+| `npm run build`| Production build   |
+| `npm run lint` | ESLint             |
+
+This project uses [Next.js](https://nextjs.org) (see [AGENTS.md](./AGENTS.md) for repo-specific Next notes).

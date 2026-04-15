@@ -129,6 +129,17 @@ function parseMonitorHermesPayload(text: string): MonitorHermesPayload | null {
   return toMonitorHermesPayload(parsed);
 }
 
+function buildMonitorUserPrompt(objective?: string): string {
+  const baseObjective = objective ?? "Summarize monitor output.";
+  return `${baseObjective}
+
+Constraints:
+- Prioritize AVE Cloud data and block explorer evidence in provided context.
+- If monitor payload contains API errors (e.g., chain not supported), report only that evidence.
+- Do not invent chain IDs, RPC requirements, or unsupported network claims.
+- Return only monitor-focused alerts and sentiment.`;
+}
+
 function toResearcherHermesPayload(value: unknown): ResearcherHermesPayload | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as {
@@ -283,7 +294,7 @@ export async function executeFlow(params: {
       monitorBundle = { ...monitorBundle as object, [n.id]: parts };
       const sub = await runHermesRole({
         role: "monitor",
-        userPrompt: params.objective ?? "Summarize monitor output.",
+        userPrompt: buildMonitorUserPrompt(params.objective),
         contextJson: parts,
         runId: params.runId,
       });
@@ -296,7 +307,7 @@ export async function executeFlow(params: {
         const retrySub = await runHermesRole({
           role: "monitor",
           userPrompt:
-            "Return STRICT JSON only with shape {\"alerts\": string[], \"sentiment\": \"bullish\"|\"bearish\"|\"neutral\"}. No markdown.",
+            "Return STRICT JSON only with shape {\"alerts\": string[], \"sentiment\": \"bullish\"|\"bearish\"|\"neutral\"}. No markdown. Use only provided AVE monitor evidence. Do not invent chain IDs or unsupported network claims.",
           contextJson: {
             monitor: parts,
             previous_response: sub.text,

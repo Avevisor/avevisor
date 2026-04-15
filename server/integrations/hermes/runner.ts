@@ -22,6 +22,22 @@ const skillByRole: Record<HermesRole, string> = {
 };
 
 const supervisorResponseIdByRun = new Map<string, string>();
+const degradedHermesByRun = new Map<string, string>();
+const MAX_DEGRADED_RUN_CACHE = 200;
+
+function markHermesRunDegraded(runId: string | undefined, note: string): void {
+  if (!runId) return;
+  degradedHermesByRun.set(runId, note);
+  if (degradedHermesByRun.size <= MAX_DEGRADED_RUN_CACHE) return;
+  const oldestKey = degradedHermesByRun.keys().next().value;
+  if (!oldestKey) return;
+  degradedHermesByRun.delete(oldestKey);
+}
+
+function getHermesRunDegradedNote(runId: string | undefined): string | null {
+  if (!runId) return null;
+  return degradedHermesByRun.get(runId) ?? null;
+}
 
 interface HermesCompletionResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -75,6 +91,9 @@ function getHermesUpstreamErrorText(text: string): string | null {
   if (/^Error code:\s*\d+/i.test(normalized)) return normalized;
   if (normalized.includes("No endpoints found for")) return normalized;
   if (normalized.includes('"code": "invalid_api_key"')) return normalized;
+  if (/API call failed after \d+ retries:\s*HTTP 429/i.test(normalized)) return normalized;
+  if (/Rate limit exceeded/i.test(normalized)) return normalized;
+  if (/free-models-per-(day|min)/i.test(normalized)) return normalized;
   return null;
 }
 
@@ -96,12 +115,82 @@ function buildMockResponse(params: {
   contextJson?: unknown;
   note: string;
 }): { text: string; mock: boolean } {
+  const echo = params.userPrompt.slice(0, 500);
+  const context = params.contextJson ?? null;
+  if (params.role === "monitor") {
+    return {
+      mock: true,
+      text: JSON.stringify({
+        role: params.role,
+        alerts: [`Hermes unavailable, monitor mock used: ${params.note}`],
+        sentiment: "neutral",
+        echo,
+        context,
+        note: params.note,
+      }),
+    };
+  }
+  if (params.role === "researcher") {
+    return {
+      mock: true,
+      text: JSON.stringify({
+        role: params.role,
+        findings: [`Hermes unavailable, researcher mock used: ${params.note}`],
+        risks: ["Research confidence reduced because provider response was unavailable."],
+        followUps: ["Retry researcher phase when Hermes provider recovers."],
+        echo,
+        context,
+        note: params.note,
+      }),
+    };
+  }
+  if (params.role === "strategist") {
+    return {
+      mock: true,
+      text: JSON.stringify({
+        role: params.role,
+        thesis: "Hermes unavailable; defaulting to defensive no-action strategy.",
+        actions: ["Hold position until a valid strategist response is available."],
+        riskControls: ["Do not execute live trade based on degraded strategist output."],
+        echo,
+        context,
+        note: params.note,
+      }),
+    };
+  }
+  if (params.role === "trader") {
+    return {
+      mock: true,
+      text: JSON.stringify({
+        role: params.role,
+        decision: "hold",
+        reason: `Hermes unavailable, trader mock used: ${params.note}`,
+        checks: ["Do not submit live orders while trader model output is degraded."],
+        echo,
+        context,
+        note: params.note,
+      }),
+    };
+  }
+  if (params.role === "supervisor") {
+    return {
+      mock: true,
+      text: JSON.stringify({
+        role: params.role,
+        next: [],
+        rationale: `Hermes unavailable, supervisor mock used: ${params.note}`,
+        echo,
+        context,
+        note: params.note,
+      }),
+    };
+  }
   return {
     mock: true,
     text: JSON.stringify({
       role: params.role,
-      echo: params.userPrompt.slice(0, 500),
-      context: params.contextJson ?? null,
+      echo,
+      context,
       note: params.note,
     }),
   };
@@ -123,6 +212,7 @@ export async function runHermesRole(params: {
   const primaryModel = process.env.HERMES_MODEL?.trim() || "hermes";
   const fallbackModel = process.env.HERMES_MODEL_FALLBACK?.trim() || "hermes";
   const maxTokens = parseHermesMaxTokens();
+  const shouldFallback = shouldFallbackToMockOnFetchError();
 
   if (!apiUrl) {
     return buildMockResponse({
@@ -130,6 +220,16 @@ export async function runHermesRole(params: {
       userPrompt: params.userPrompt,
       contextJson: params.contextJson,
       note: "Set HERMES_API_URL for live Hermes. Mock response for MVP.",
+    });
+  }
+
+  const degradedRunNote = shouldFallback ? getHermesRunDegradedNote(params.runId) : null;
+  if (degradedRunNote) {
+    return buildMockResponse({
+      role: params.role,
+      userPrompt: params.userPrompt,
+      contextJson: params.contextJson,
+      note: `Hermes run degraded mode active, skipped upstream call: ${degradedRunNote}`,
     });
   }
 
@@ -167,12 +267,14 @@ export async function runHermesRole(params: {
         body: JSON.stringify(responseBody),
       });
     } catch (error) {
-      if (shouldFallbackToMockOnFetchError()) {
+      if (shouldFallback) {
+        const note = `Hermes responses unavailable, used mock fallback: ${getErrorMessage(error)}`;
+        markHermesRunDegraded(params.runId, note);
         return buildMockResponse({
           role: params.role,
           userPrompt: params.userPrompt,
           contextJson: params.contextJson,
-          note: `Hermes responses unavailable, used mock fallback: ${getErrorMessage(error)}`,
+          note,
         });
       }
       throw new Error(
@@ -218,12 +320,14 @@ export async function runHermesRole(params: {
     }
     const retryUpstreamError = getHermesUpstreamErrorText(text);
     if (retryUpstreamError) {
-      if (shouldFallbackToMockOnFetchError()) {
+      if (shouldFallback) {
+        const note = `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`;
+        markHermesRunDegraded(params.runId, note);
         return buildMockResponse({
           role: params.role,
           userPrompt: params.userPrompt,
           contextJson: params.contextJson,
-          note: `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`,
+          note,
         });
       }
       throw new Error(`Hermes upstream model/provider error: ${retryUpstreamError}`);
@@ -255,12 +359,14 @@ export async function runHermesRole(params: {
       body: JSON.stringify(body),
     });
   } catch (error) {
-    if (shouldFallbackToMockOnFetchError()) {
+    if (shouldFallback) {
+      const note = `Hermes chat unavailable, used mock fallback: ${getErrorMessage(error)}`;
+      markHermesRunDegraded(params.runId, note);
       return buildMockResponse({
         role: params.role,
         userPrompt: params.userPrompt,
         contextJson: params.contextJson,
-        note: `Hermes chat unavailable, used mock fallback: ${getErrorMessage(error)}`,
+        note,
       });
     }
     throw new Error(
@@ -298,12 +404,14 @@ export async function runHermesRole(params: {
 
   const retryUpstreamError = getHermesUpstreamErrorText(text);
   if (retryUpstreamError) {
-    if (shouldFallbackToMockOnFetchError()) {
+    if (shouldFallback) {
+      const note = `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`;
+      markHermesRunDegraded(params.runId, note);
       return buildMockResponse({
         role: params.role,
         userPrompt: params.userPrompt,
         contextJson: params.contextJson,
-        note: `Hermes upstream model/provider error, used mock fallback: ${retryUpstreamError}`,
+        note,
       });
     }
     throw new Error(`Hermes upstream model/provider error: ${retryUpstreamError}`);
