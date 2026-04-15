@@ -88,6 +88,10 @@ const supervisorSettingsSchema = commonSettingsSchema.extend({
 
 const researcherSettingsSchema = commonSettingsSchema.extend({
   topics: z.string().default("Token fundamentals, social, docs"),
+  instruction: z
+    .string()
+    .default("Research token info and news. Return structured JSON with evidence."),
+  outputFormat: z.enum(["json", "text"]).default("json"),
   assetsSymbols: z.array(z.string()).default([]),
   keywords: z.array(z.string()).default([]),
   sources: z.array(z.enum(["x", "news", "docs", "on-chain", "forums", "custom-api"])).default([
@@ -108,6 +112,11 @@ const monitorSettingsSchema = commonSettingsSchema.extend({
   chain: z.string().default("solana"),
   walletAddress: z.string().optional(),
   tokenId: z.string().optional(),
+  monitorTransactions: z.boolean().default(true),
+  monitorKlines: z.boolean().default(true),
+  monitorPriceChange: z.boolean().default(true),
+  monitorWallet: z.boolean().default(true),
+  monitorToken: z.boolean().default(true),
   pollIntervalSec: z.number().int().positive().default(30),
   symbols: z.array(z.string()).default([]),
   monitorPnl: z.boolean().default(true),
@@ -123,10 +132,19 @@ const monitorSettingsSchema = commonSettingsSchema.extend({
   sendToSupervisor: z.boolean().default(true),
   triggerStrategist: z.boolean().default(false),
   pauseTrader: z.boolean().default(false),
+  alertCondition: z
+    .enum(["price-threshold", "change-threshold", "transaction-spike", "custom"])
+    .default("change-threshold"),
+  alertInstruction: z
+    .string()
+    .default("Alert supervisor when selected threshold conditions are met."),
 });
 
 const strategistSettingsSchema = commonSettingsSchema.extend({
   riskNotes: z.string().default("Conservative sizing"),
+  improveWithSupervisorFeedback: z.boolean().default(true),
+  requiresSupervisorApproval: z.boolean().default(true),
+  passToTraderOnApproval: z.boolean().default(true),
   strategyType: z
     .enum([
       "trend",
@@ -165,6 +183,10 @@ const traderSettingsSchema = commonSettingsSchema.extend({
   swapType: z.enum(["buy", "sell"]).default("buy"),
   slippageBps: z.string().default("500"),
   useMev: z.boolean().default(false),
+  strictStrategyExecution: z.boolean().default(true),
+  strategySource: z.enum(["strategist-approved", "manual"]).default(
+    "strategist-approved",
+  ),
   allowedSymbols: z.array(z.string()).default([]),
   allowedOrderTypes: z.array(z.enum(["market", "limit"])).default(["market"]),
   maxOrderSize: z.string().optional(),
@@ -183,6 +205,8 @@ const traderSettingsSchema = commonSettingsSchema.extend({
 const walletSettingsSchema = commonSettingsSchema.extend({
   assetsName: z.string().default("demo-delegate"),
   walletProvider: z.string().default("ave-delegate"),
+  autonomousTradingEnabled: z.boolean().default(true),
+  proxyWalletEnabled: z.boolean().default(true),
   walletAddress: z.string().optional(),
   chainNetwork: z.string().default("solana"),
   custodyMode: z.enum(["read-only", "signer", "delegated-signer"]).default("read-only"),
@@ -205,6 +229,9 @@ const walletSettingsSchema = commonSettingsSchema.extend({
 
 const toolSettingsSchema = commonSettingsSchema.extend({
   toolId: z.string().default("x-api"),
+  platform: z.string().default("custom-api"),
+  apiBaseUrl: z.string().default(""),
+  apiKeyRef: z.string().optional(),
   mcpEndpoint: z.string().default(""),
   mcpServerId: z.string().optional(),
   transport: z.enum(["http", "stdio", "sse"]).default("http"),

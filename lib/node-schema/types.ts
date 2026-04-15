@@ -86,6 +86,8 @@ export interface SupervisorConfig extends CommonNodeSettings {
 
 export interface ResearcherConfig extends CommonNodeSettings {
   topics: string;
+  instruction: string;
+  outputFormat: "json" | "text";
   assetsSymbols: string[];
   keywords: string[];
   sources: Array<"x" | "news" | "docs" | "on-chain" | "forums" | "custom-api">;
@@ -102,6 +104,11 @@ export interface MonitorConfig extends CommonNodeSettings {
   chain: string;
   walletAddress?: string;
   tokenId?: string;
+  monitorTransactions: boolean;
+  monitorKlines: boolean;
+  monitorPriceChange: boolean;
+  monitorWallet: boolean;
+  monitorToken: boolean;
   pollIntervalSec: number;
   symbols: string[];
   monitorPnl: boolean;
@@ -117,10 +124,15 @@ export interface MonitorConfig extends CommonNodeSettings {
   sendToSupervisor: boolean;
   triggerStrategist: boolean;
   pauseTrader: boolean;
+  alertCondition: "price-threshold" | "change-threshold" | "transaction-spike" | "custom";
+  alertInstruction: string;
 }
 
 export interface StrategistConfig extends CommonNodeSettings {
   riskNotes: string;
+  improveWithSupervisorFeedback: boolean;
+  requiresSupervisorApproval: boolean;
+  passToTraderOnApproval: boolean;
   strategyType:
     | "trend"
     | "mean-reversion"
@@ -156,6 +168,8 @@ export interface TraderConfig extends CommonNodeSettings {
   swapType: "buy" | "sell";
   slippageBps: string;
   useMev: boolean;
+  strictStrategyExecution: boolean;
+  strategySource: "strategist-approved" | "manual";
   allowedSymbols: string[];
   allowedOrderTypes: Array<"market" | "limit">;
   maxOrderSize?: string;
@@ -174,6 +188,8 @@ export interface TraderConfig extends CommonNodeSettings {
 export interface WalletConfig extends CommonNodeSettings {
   assetsName: string;
   walletProvider: string;
+  autonomousTradingEnabled: boolean;
+  proxyWalletEnabled: boolean;
   walletAddress?: string;
   chainNetwork: string;
   custodyMode: "read-only" | "signer" | "delegated-signer";
@@ -196,6 +212,9 @@ export interface WalletConfig extends CommonNodeSettings {
 
 export interface ToolConfig extends CommonNodeSettings {
   toolId: string;
+  platform: string;
+  apiBaseUrl: string;
+  apiKeyRef?: string;
   mcpEndpoint: string;
   mcpServerId?: string;
   transport: "http" | "stdio" | "sse";

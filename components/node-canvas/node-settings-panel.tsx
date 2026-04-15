@@ -43,7 +43,7 @@ export function NodeSettingsPanel({
 
   const selectedNode = node;
   const d = selectedNode.data as AgentNodeData;
-  const cfg = coerceNodeConfig(d.nodeType, d.config ?? {}) as Record<
+  const cfg = coerceNodeConfig(d.nodeType, d.config ?? {}) as unknown as Record<
     string,
     string | boolean | number | undefined
   >;
@@ -93,14 +93,39 @@ export function NodeSettingsPanel({
         )}
 
         {d.nodeType === "researcher" && (
-          <label className="grid gap-1">
-            <span className="text-muted-foreground">Topics</span>
-            <input
-              className="rounded-md border border-input bg-background px-2 py-1.5"
-              value={String(cfg.topics ?? "")}
-              onChange={(e) => setField("researcher", "topics", e.target.value)}
-            />
-          </label>
+          <>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Topics</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.topics ?? "")}
+                onChange={(e) => setField("researcher", "topics", e.target.value)}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Research instruction</span>
+              <textarea
+                className="min-h-[80px] rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.instruction ?? "")}
+                onChange={(e) =>
+                  setField("researcher", "instruction", e.target.value)
+                }
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Output format</span>
+              <select
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.outputFormat ?? "json")}
+                onChange={(e) =>
+                  setField("researcher", "outputFormat", e.target.value as "json" | "text")
+                }
+              >
+                <option value="json">json</option>
+                <option value="text">text</option>
+              </select>
+            </label>
+          </>
         )}
 
         {d.nodeType === "monitor" && (
@@ -132,18 +157,131 @@ export function NodeSettingsPanel({
                 onChange={(e) => setField("monitor", "tokenId", e.target.value)}
               />
             </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Alert condition</span>
+              <select
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.alertCondition ?? "change-threshold")}
+                onChange={(e) =>
+                  setField(
+                    "monitor",
+                    "alertCondition",
+                    e.target.value as
+                      | "price-threshold"
+                      | "change-threshold"
+                      | "transaction-spike"
+                      | "custom",
+                  )
+                }
+              >
+                <option value="price-threshold">price-threshold</option>
+                <option value="change-threshold">change-threshold</option>
+                <option value="transaction-spike">transaction-spike</option>
+                <option value="custom">custom</option>
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Alert instruction</span>
+              <textarea
+                className="min-h-[70px] rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.alertInstruction ?? "")}
+                onChange={(e) =>
+                  setField("monitor", "alertInstruction", e.target.value)
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.monitorTransactions)}
+                onChange={(e) =>
+                  setField("monitor", "monitorTransactions", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Monitor transactions</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.monitorKlines)}
+                onChange={(e) => setField("monitor", "monitorKlines", e.target.checked)}
+              />
+              <span className="text-muted-foreground">Monitor klines</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.monitorPriceChange)}
+                onChange={(e) =>
+                  setField("monitor", "monitorPriceChange", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Monitor price change</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.monitorWallet)}
+                onChange={(e) => setField("monitor", "monitorWallet", e.target.checked)}
+              />
+              <span className="text-muted-foreground">Monitor wallet</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.monitorToken)}
+                onChange={(e) => setField("monitor", "monitorToken", e.target.checked)}
+              />
+              <span className="text-muted-foreground">Monitor token</span>
+            </label>
           </>
         )}
 
         {d.nodeType === "strategist" && (
-          <label className="grid gap-1">
-            <span className="text-muted-foreground">Risk notes</span>
-            <input
-              className="rounded-md border border-input bg-background px-2 py-1.5"
-              value={String(cfg.riskNotes ?? "")}
-              onChange={(e) => setField("strategist", "riskNotes", e.target.value)}
-            />
-          </label>
+          <>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Risk notes</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.riskNotes ?? "")}
+                onChange={(e) => setField("strategist", "riskNotes", e.target.value)}
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.improveWithSupervisorFeedback)}
+                onChange={(e) =>
+                  setField(
+                    "strategist",
+                    "improveWithSupervisorFeedback",
+                    e.target.checked,
+                  )
+                }
+              />
+              <span className="text-muted-foreground">Improve with supervisor feedback</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.requiresSupervisorApproval)}
+                onChange={(e) =>
+                  setField("strategist", "requiresSupervisorApproval", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Requires supervisor approval</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.passToTraderOnApproval)}
+                onChange={(e) =>
+                  setField("strategist", "passToTraderOnApproval", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Pass to trader after approval</span>
+            </label>
+          </>
         )}
 
         {d.nodeType === "trader" && (
@@ -223,22 +361,97 @@ export function NodeSettingsPanel({
               />
               <span className="text-muted-foreground">useMev</span>
             </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.strictStrategyExecution)}
+                onChange={(e) =>
+                  setField("trader", "strictStrategyExecution", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Strictly follow strategy</span>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Strategy source</span>
+              <select
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.strategySource ?? "strategist-approved")}
+                onChange={(e) =>
+                  setField(
+                    "trader",
+                    "strategySource",
+                    e.target.value as "strategist-approved" | "manual",
+                  )
+                }
+              >
+                <option value="strategist-approved">strategist-approved</option>
+                <option value="manual">manual</option>
+              </select>
+            </label>
           </>
         )}
 
         {d.nodeType === "wallet" && (
-          <label className="grid gap-1">
-            <span className="text-muted-foreground">assetsName (new wallet)</span>
-            <input
-              className="rounded-md border border-input bg-background px-2 py-1.5"
-              value={String(cfg.assetsName ?? "")}
-              onChange={(e) => setField("wallet", "assetsName", e.target.value)}
-            />
-          </label>
+          <>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">assetsName (new wallet)</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.assetsName ?? "")}
+                onChange={(e) => setField("wallet", "assetsName", e.target.value)}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Wallet provider</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.walletProvider ?? "")}
+                onChange={(e) =>
+                  setField("wallet", "walletProvider", e.target.value)
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.proxyWalletEnabled)}
+                onChange={(e) =>
+                  setField("wallet", "proxyWalletEnabled", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Use AVE proxy bot wallet</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.autonomousTradingEnabled)}
+                onChange={(e) =>
+                  setField("wallet", "autonomousTradingEnabled", e.target.checked)
+                }
+              />
+              <span className="text-muted-foreground">Allow autonomous trading</span>
+            </label>
+          </>
         )}
 
         {d.nodeType === "tool" && (
           <>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">Platform</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.platform ?? "")}
+                onChange={(e) => setField("tool", "platform", e.target.value)}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-muted-foreground">API/Platform URL</span>
+              <input
+                className="rounded-md border border-input bg-background px-2 py-1.5"
+                value={String(cfg.apiBaseUrl ?? "")}
+                onChange={(e) => setField("tool", "apiBaseUrl", e.target.value)}
+              />
+            </label>
             <label className="grid gap-1">
               <span className="text-muted-foreground">toolId</span>
               <input
