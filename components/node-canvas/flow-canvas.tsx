@@ -25,6 +25,7 @@ import { validateFlowGraph } from "@/lib/node-schema/validation";
 import {
   FLOW_STORAGE_KEY,
   getDefaultFlowTemplate,
+  SUPERVISOR_NODE_ID,
 } from "@/lib/flow-template";
 
 import type { AgentNodeData } from "./agent-node";
@@ -34,7 +35,6 @@ import { NodeSettingsPanel } from "./node-settings-panel";
 const nodeTypes = { agent: AgentNode };
 
 const palette: { type: AgentNodeType; label: string; letter: string }[] = [
-  { type: "supervisor", label: "Supervisor", letter: "S" },
   { type: "researcher", label: "Researcher", letter: "R" },
   { type: "monitor", label: "Monitor", letter: "M" },
   { type: "strategist", label: "Strategist", letter: "P" },
@@ -47,6 +47,23 @@ let idCounter = 0;
 function nextId() {
   idCounter += 1;
   return `n-${Date.now()}-${idCounter}`;
+}
+
+/**
+ * Ensures the canvas always has exactly one fixed Supervisor node.
+ * If the saved state is invalid, fallback to default template.
+ */
+function enforceSingleSupervisor(input: {
+  nodes: Node[];
+  edges: Edge[];
+}): { nodes: Node[]; edges: Edge[] } {
+  const supervisors = input.nodes.filter(
+    (n) => (n.data as AgentNodeData | undefined)?.nodeType === "supervisor",
+  );
+  if (supervisors.length !== 1) return getDefaultFlowTemplate();
+  const supervisor = supervisors[0];
+  if (supervisor.id !== SUPERVISOR_NODE_ID) return getDefaultFlowTemplate();
+  return input;
 }
 
 /**
@@ -69,8 +86,9 @@ function FlowCanvasInner() {
       const raw = localStorage.getItem(FLOW_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as { nodes: Node[]; edges: Edge[] };
-        setNodes(parsed.nodes);
-        setEdges(parsed.edges);
+        const safe = enforceSingleSupervisor(parsed);
+        setNodes(safe.nodes);
+        setEdges(safe.edges);
       } else {
         const seed = getDefaultFlowTemplate();
         setNodes(seed.nodes);
@@ -120,6 +138,7 @@ function FlowCanvasInner() {
       const raw = e.dataTransfer.getData("application/reactflow");
       if (!raw) return;
       const nodeType = raw as AgentNodeType;
+      if (nodeType === "supervisor") return;
       const position = screenToFlowPosition({
         x: e.clientX,
         y: e.clientY,
