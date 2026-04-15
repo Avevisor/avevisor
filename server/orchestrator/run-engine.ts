@@ -79,6 +79,7 @@ export async function executeFlow(params: {
   let monitorBundle: unknown = {};
   let researchBundle: unknown = {};
   let strategyBundle: unknown = {};
+  let supervisorHermesText: string | undefined;
 
   /** Monitor phase */
   for (const n of monitorNodes) {
@@ -226,6 +227,7 @@ export async function executeFlow(params: {
         },
         runId: params.runId,
       });
+      supervisorHermesText = sub.text;
       logs.push({
         nodeId: sup.id,
         nodeType: "supervisor",
@@ -316,6 +318,20 @@ export async function executeFlow(params: {
         });
       }
 
+      const traderHermes = await runHermesRole({
+        role: "trader",
+        userPrompt: params.objective ?? "Validate strategy and prepare execution plan.",
+        contextJson: {
+          objective: params.objective ?? null,
+          config: cfg,
+          monitor: monitorBundle,
+          research: researchBundle,
+          strategy: strategyBundle,
+          supervisor: supervisorHermesText ?? null,
+        },
+        runId: params.runId,
+      });
+
       if (isDryRun) {
         logs.push({
           nodeId: n.id,
@@ -324,6 +340,7 @@ export async function executeFlow(params: {
           output: {
             dryRun: true,
             wouldSubmit: cfg,
+            hermes: traderHermes,
           },
           startedAt,
           endedAt: nowIso(),
@@ -337,6 +354,7 @@ export async function executeFlow(params: {
           nodeType: "trader",
           status: "error",
           error: "Delegate credentials missing for live trade",
+          output: { hermes: traderHermes },
           startedAt,
           endedAt: nowIso(),
         });
@@ -379,7 +397,7 @@ export async function executeFlow(params: {
         nodeId: n.id,
         nodeType: "trader",
         status: "ok",
-        output: { swap: swapRes, botswap },
+        output: { hermes: traderHermes, swap: swapRes, botswap },
         startedAt,
         endedAt: nowIso(),
       });

@@ -3,19 +3,22 @@ import {
   researcherSkill,
   strategistSkill,
   supervisorSkill,
+  traderSkill,
 } from "./skills";
 
 export type HermesRole =
   | "supervisor"
   | "researcher"
   | "monitor"
-  | "strategist";
+  | "strategist"
+  | "trader";
 
 const skillByRole: Record<HermesRole, string> = {
   supervisor: supervisorSkill,
   researcher: researcherSkill,
   monitor: monitorSkill,
   strategist: strategistSkill,
+  trader: traderSkill,
 };
 
 const supervisorResponseIdByRun = new Map<string, string>();
@@ -58,6 +61,31 @@ function extractResponsesApiText(data: HermesResponsesApiResponse): string {
   return outputText ?? "";
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function shouldFallbackToMockOnFetchError(): boolean {
+  return process.env.HERMES_FALLBACK_TO_MOCK_ON_ERROR !== "false";
+}
+
+function buildMockResponse(params: {
+  role: HermesRole;
+  userPrompt: string;
+  contextJson?: unknown;
+  note: string;
+}): { text: string; mock: boolean } {
+  return {
+    mock: true,
+    text: JSON.stringify({
+      role: params.role,
+      echo: params.userPrompt.slice(0, 500),
+      context: params.contextJson ?? null,
+      note: params.note,
+    }),
+  };
+}
+
 /**
  * Invokes Hermes-compatible HTTP API if configured; otherwise returns structured mock output for demos.
  */
@@ -73,15 +101,12 @@ export async function runHermesRole(params: {
   const useResponses = process.env.HERMES_USE_RESPONSES === "true";
 
   if (!apiUrl) {
-    return {
-      mock: true,
-      text: JSON.stringify({
-        role: params.role,
-        echo: params.userPrompt.slice(0, 500),
-        context: params.contextJson ?? null,
-        note: "Set HERMES_API_URL for live Hermes. Mock response for MVP.",
-      }),
-    };
+    return buildMockResponse({
+      role: params.role,
+      userPrompt: params.userPrompt,
+      contextJson: params.contextJson,
+      note: "Set HERMES_API_URL for live Hermes. Mock response for MVP.",
+    });
   }
 
   const baseUrl = normalizeHermesApiBase(apiUrl);
@@ -105,14 +130,30 @@ export async function runHermesRole(params: {
       responseBody.previous_response_id = previousResponseId;
     }
 
-    const responseRes = await fetch(`${baseUrl}/responses`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify(responseBody),
-    });
+    const responsesUrl = `${baseUrl}/responses`;
+    let responseRes: Response;
+    try {
+      responseRes = await fetch(responsesUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify(responseBody),
+      });
+    } catch (error) {
+      if (shouldFallbackToMockOnFetchError()) {
+        return buildMockResponse({
+          role: params.role,
+          userPrompt: params.userPrompt,
+          contextJson: params.contextJson,
+          note: `Hermes responses unavailable, used mock fallback: ${getErrorMessage(error)}`,
+        });
+      }
+      throw new Error(
+        `Hermes responses fetch failed at ${responsesUrl}: ${getErrorMessage(error)}`,
+      );
+    }
 
     if (!responseRes.ok) {
       const t = await responseRes.text();
@@ -137,14 +178,30 @@ export async function runHermesRole(params: {
     ],
   };
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+  const chatCompletionsUrl = `${baseUrl}/chat/completions`;
+  let res: Response;
+  try {
+    res = await fetch(chatCompletionsUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (shouldFallbackToMockOnFetchError()) {
+      return buildMockResponse({
+        role: params.role,
+        userPrompt: params.userPrompt,
+        contextJson: params.contextJson,
+        note: `Hermes chat unavailable, used mock fallback: ${getErrorMessage(error)}`,
+      });
+    }
+    throw new Error(
+      `Hermes chat fetch failed at ${chatCompletionsUrl}: ${getErrorMessage(error)}`,
+    );
+  }
 
   if (!res.ok) {
     const t = await res.text();

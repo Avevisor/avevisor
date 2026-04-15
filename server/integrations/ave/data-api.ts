@@ -15,14 +15,21 @@ export async function dataApiFetch<T = unknown>(params: {
       if (v !== undefined) url.searchParams.set(k, String(v));
     }
   }
-  const res = await fetch(url.toString(), {
-    ...params.init,
-    headers: {
-      "X-API-KEY": params.apiKey,
-      Accept: "application/json",
-      ...params.init?.headers,
-    },
-  });
+  const requestUrl = url.toString();
+  let res: Response;
+  try {
+    res = await fetch(requestUrl, {
+      ...params.init,
+      headers: {
+        "X-API-KEY": params.apiKey,
+        Accept: "application/json",
+        ...params.init?.headers,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`AVE Data API fetch failed at ${requestUrl}: ${message}`);
+  }
   const data = (await res.json().catch(() => ({}))) as T;
   return { ok: res.ok, status: res.status, data };
 }
