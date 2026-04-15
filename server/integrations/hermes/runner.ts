@@ -69,6 +69,15 @@ function shouldFallbackToMockOnFetchError(): boolean {
   return process.env.HERMES_FALLBACK_TO_MOCK_ON_ERROR !== "false";
 }
 
+function getHermesUpstreamErrorText(text: string): string | null {
+  const normalized = text.trim();
+  if (!normalized) return null;
+  if (/^Error code:\s*\d+/i.test(normalized)) return normalized;
+  if (normalized.includes("No endpoints found for")) return normalized;
+  if (normalized.includes('"code": "invalid_api_key"')) return normalized;
+  return null;
+}
+
 function buildMockResponse(params: {
   role: HermesRole;
   userPrompt: string;
@@ -164,7 +173,20 @@ export async function runHermesRole(params: {
     if (data.id) {
       supervisorResponseIdByRun.set(params.runId, data.id);
     }
-    return { text: extractResponsesApiText(data), mock: false };
+    const text = extractResponsesApiText(data);
+    const upstreamError = getHermesUpstreamErrorText(text);
+    if (upstreamError) {
+      if (shouldFallbackToMockOnFetchError()) {
+        return buildMockResponse({
+          role: params.role,
+          userPrompt: params.userPrompt,
+          contextJson: params.contextJson,
+          note: `Hermes upstream model/provider error, used mock fallback: ${upstreamError}`,
+        });
+      }
+      throw new Error(`Hermes upstream model/provider error: ${upstreamError}`);
+    }
+    return { text, mock: false };
   }
 
   const body = {
@@ -210,5 +232,17 @@ export async function runHermesRole(params: {
 
   const data = (await res.json()) as HermesCompletionResponse;
   const text = data.choices?.[0]?.message?.content ?? "";
+  const upstreamError = getHermesUpstreamErrorText(text);
+  if (upstreamError) {
+    if (shouldFallbackToMockOnFetchError()) {
+      return buildMockResponse({
+        role: params.role,
+        userPrompt: params.userPrompt,
+        contextJson: params.contextJson,
+        note: `Hermes upstream model/provider error, used mock fallback: ${upstreamError}`,
+      });
+    }
+    throw new Error(`Hermes upstream model/provider error: ${upstreamError}`);
+  }
   return { text, mock: false };
 }
